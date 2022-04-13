@@ -1,3 +1,3 @@
-module github.com/bigcache
+module github.com/hengfeiyang/bigcache
 
 go 1.17
