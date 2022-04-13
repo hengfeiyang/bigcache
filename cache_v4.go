@@ -49,10 +49,8 @@ func (t *cacheV4) Delete(key string) {
 	t.shards[shardKey].Delete(key)
 }
 
-var h = fnv.New64a()
-
 func (t *cacheV4) getShardKey(key []byte) int {
-	h.Reset()
+	h := fnv.New64a()
 	h.Write(key)
 	i := h.Sum64()
 	return int(i & t.bitMask)
