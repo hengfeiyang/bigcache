@@ -23,7 +23,7 @@ func NewCacheV4(maxEntrySize int, shards int) Cacher {
 		shards:  make([]Cacher, shards+1),
 		bitMask: uint64(shards - 1),
 	}
-	for i := 0; i < shards; i++ {
+	for i := 0; i <= shards; i++ {
 		t.shards[i] = NewCacheV2(maxEntrySize / shards)
 	}
 	return t
@@ -47,6 +47,14 @@ func (t *cacheV4) TTL(key string) (time.Duration, error) {
 func (t *cacheV4) Delete(key string) {
 	shardKey := t.getShardKey([]byte(key))
 	t.shards[shardKey].Delete(key)
+}
+
+func (t *cacheV4) Len() int {
+	i := 0
+	for k := range t.shards {
+		i += t.shards[k].Len()
+	}
+	return i
 }
 
 func (t *cacheV4) getShardKey(key []byte) int {

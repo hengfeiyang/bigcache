@@ -52,3 +52,7 @@ func (t *cacheV1) TTL(key string) (time.Duration, error) {
 func (t *cacheV1) Delete(key string) {
 	delete(t.data, key)
 }
+
+func (t *cacheV1) Len() int {
+	return len(t.data)
+}

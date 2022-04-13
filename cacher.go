@@ -12,6 +12,7 @@ type Cacher interface {
 	Get(key string) ([]byte, error)
 	TTL(key string) (time.Duration, error)
 	Delete(key string)
+	Len() int
 }
 
 type CacheItem struct {

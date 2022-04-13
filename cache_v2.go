@@ -64,3 +64,10 @@ func (t *cacheV2) Delete(key string) {
 	delete(t.data, key)
 	t.lock.Unlock()
 }
+
+func (t *cacheV2) Len() int {
+	t.lock.Lock()
+	i := len(t.data)
+	t.lock.Unlock()
+	return i
+}

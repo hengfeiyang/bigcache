@@ -55,3 +55,12 @@ func (t *cacheV3) TTL(key string) (time.Duration, error) {
 func (t *cacheV3) Delete(key string) {
 	t.data.Delete(key)
 }
+
+func (t *cacheV3) Len() int {
+	i := 0
+	t.data.Range(func(key, value interface{}) bool {
+		i++
+		return true
+	})
+	return i
+}
