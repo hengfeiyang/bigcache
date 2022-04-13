@@ -11,9 +11,9 @@ type cacheV2 struct {
 	lock sync.RWMutex
 }
 
-func NewCacheV2(maxEntrySize int) Cacher {
+func NewCacheV2(capacity int) Cacher {
 	return &cacheV2{
-		data: make(map[string]CacheItem, maxEntrySize),
+		data: make(map[string]CacheItem, capacity),
 	}
 }
 

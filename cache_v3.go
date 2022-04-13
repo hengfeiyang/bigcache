@@ -10,7 +10,7 @@ type cacheV3 struct {
 	data sync.Map
 }
 
-func NewCacheV3(maxEntrySize int) Cacher {
+func NewCacheV3(capacity int) Cacher {
 	return &cacheV3{}
 }
 

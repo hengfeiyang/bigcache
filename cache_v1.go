@@ -7,9 +7,9 @@ type cacheV1 struct {
 	data map[string]CacheItem
 }
 
-func NewCacheV1(maxEntrySize int) Cacher {
+func NewCacheV1(capacity int) Cacher {
 	return &cacheV1{
-		data: make(map[string]CacheItem, maxEntrySize),
+		data: make(map[string]CacheItem, capacity),
 	}
 }
 
