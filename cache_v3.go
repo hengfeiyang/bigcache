@@ -19,7 +19,7 @@ func (t *cacheV3) Set(key string, value []byte, ttl time.Duration) error {
 	if ttl > 0 {
 		expires = time.Now().Add(ttl)
 	}
-	t.data.Store(key, CacheItem{Expires: expires, Value: value})
+	t.data.Store(key, &CacheItem{Expires: expires, Value: value})
 	return nil
 }
 
@@ -28,7 +28,7 @@ func (t *cacheV3) Get(key string) ([]byte, error) {
 	if !ok {
 		return nil, ErrNotExist
 	}
-	item := v.(CacheItem)
+	item := v.(*CacheItem)
 	if !item.Expires.IsZero() && item.Expires.Before(time.Now()) {
 		t.Delete(key)
 		return nil, ErrNotExist
@@ -41,7 +41,7 @@ func (t *cacheV3) TTL(key string) (time.Duration, error) {
 	if !ok {
 		return 0, ErrNotExist
 	}
-	item := v.(CacheItem)
+	item := v.(*CacheItem)
 	if item.Expires.IsZero() {
 		return -1, nil
 	}
