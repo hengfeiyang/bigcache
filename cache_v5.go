@@ -119,6 +119,7 @@ func (t *cacheV5ByteStorage) Get(keyHash uint64) ([]byte, error) {
 	expires := int64(binary.LittleEndian.Uint64(header[0:8]))
 	bodyLength := int(binary.LittleEndian.Uint32(header[8 : 8+4]))
 	if expires > 0 && expires < time.Now().UnixNano() {
+		t.Delete(keyHash)
 		return nil, ErrNotExist // expired
 	}
 
@@ -144,6 +145,7 @@ func (t *cacheV5ByteStorage) TTL(keyHash uint64) (time.Duration, error) {
 	}
 	ttl := time.Duration(expires - time.Now().UnixNano())
 	if ttl <= 0 {
+		t.Delete(keyHash)
 		return -1, ErrNotExist // expired
 	}
 	return ttl, nil
