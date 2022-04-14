@@ -3,21 +3,24 @@ package bigcache
 import (
 	"fmt"
 	"testing"
+	"time"
+
+	"github.com/allegro/bigcache/v3"
 )
 
-func BenchmarkMapSet(b *testing.B) {
-	m := make(map[string][]byte, b.N)
-	for i := 0; i < b.N; i++ {
-		m[key(i)] = value()
-	}
-}
+// func BenchmarkMapSet(b *testing.B) {
+// 	m := make(map[string][]byte, b.N)
+// 	for i := 0; i < b.N; i++ {
+// 		m[key(i)] = value()
+// 	}
+// }
 
-func BenchmarkCacheV1Set(b *testing.B) {
-	c := NewCacheV1(b.N)
-	for i := 0; i < b.N; i++ {
-		c.Set(key(i), value(), 0)
-	}
-}
+// func BenchmarkCacheV1Set(b *testing.B) {
+// 	c := NewCacheV1(b.N)
+// 	for i := 0; i < b.N; i++ {
+// 		c.Set(key(i), value(), 0)
+// 	}
+// }
 
 func BenchmarkCacheV2Set(b *testing.B) {
 	c := NewCacheV2(b.N)
@@ -41,43 +44,55 @@ func BenchmarkCacheV4Set(b *testing.B) {
 }
 
 func BenchmarkCacheV5Set(b *testing.B) {
-	c := NewCacheV5(b.N, 256, 0)
+	c := NewCacheV5(b.N, 2560, 0)
 	for i := 0; i < b.N; i++ {
 		c.Set(key(i), value(), 0)
 	}
 }
 
-func BenchmarkMapGet(b *testing.B) {
-	b.StopTimer()
-	m := make(map[string][]byte)
-	for i := 0; i < b.N; i++ {
-		m[key(i)] = value()
+func BenchmarkBigCacheStdSet(b *testing.B) {
+	config := bigcache.Config{
+		Shards:       128,
+		MaxEntrySize: 256,
+		LifeWindow:   100 * time.Minute,
 	}
-
-	b.StartTimer()
-	hitCount := 0
+	c, _ := bigcache.NewBigCache(config)
 	for i := 0; i < b.N; i++ {
-		if m[key(i)] != nil {
-			hitCount++
-		}
+		c.Set(key(i), value())
 	}
 }
 
-func BenchmarkCacherV1Get(b *testing.B) {
-	b.StopTimer()
-	c := NewCacheV1(b.N)
-	for i := 0; i < b.N; i++ {
-		c.Set(key(i), value(), 0)
-	}
+// func BenchmarkMapGet(b *testing.B) {
+// 	b.StopTimer()
+// 	m := make(map[string][]byte)
+// 	for i := 0; i < b.N; i++ {
+// 		m[key(i)] = value()
+// 	}
 
-	b.StartTimer()
-	hitCount := 0
-	for i := 0; i < b.N; i++ {
-		if v, _ := c.Get(key(i)); v != nil {
-			hitCount++
-		}
-	}
-}
+// 	b.StartTimer()
+// 	hitCount := 0
+// 	for i := 0; i < b.N; i++ {
+// 		if m[key(i)] != nil {
+// 			hitCount++
+// 		}
+// 	}
+// }
+
+// func BenchmarkCacherV1Get(b *testing.B) {
+// 	b.StopTimer()
+// 	c := NewCacheV1(b.N)
+// 	for i := 0; i < b.N; i++ {
+// 		c.Set(key(i), value(), 0)
+// 	}
+
+// 	b.StartTimer()
+// 	hitCount := 0
+// 	for i := 0; i < b.N; i++ {
+// 		if v, _ := c.Get(key(i)); v != nil {
+// 			hitCount++
+// 		}
+// 	}
+// }
 
 func BenchmarkCacherV2Get(b *testing.B) {
 	b.StopTimer()
@@ -116,6 +131,43 @@ func BenchmarkCacherV4Get(b *testing.B) {
 	c := NewCacheV4(b.N, 0)
 	for i := 0; i < b.N; i++ {
 		c.Set(key(i), value(), 0)
+	}
+
+	b.StartTimer()
+	hitCount := 0
+	for i := 0; i < b.N; i++ {
+		if v, _ := c.Get(key(i)); v != nil {
+			hitCount++
+		}
+	}
+}
+
+func BenchmarkCacherV5Get(b *testing.B) {
+	b.StopTimer()
+	c := NewCacheV5(b.N, 2560, 0)
+	for i := 0; i < b.N; i++ {
+		c.Set(key(i), value(), 0)
+	}
+
+	b.StartTimer()
+	hitCount := 0
+	for i := 0; i < b.N; i++ {
+		if v, _ := c.Get(key(i)); v != nil {
+			hitCount++
+		}
+	}
+}
+
+func BenchmarkBigCacheStdGet(b *testing.B) {
+	b.StopTimer()
+	config := bigcache.Config{
+		Shards:       128,
+		MaxEntrySize: 256,
+		LifeWindow:   100 * time.Minute,
+	}
+	c, _ := bigcache.NewBigCache(config)
+	for i := 0; i < b.N; i++ {
+		c.Set(key(i), value())
 	}
 
 	b.StartTimer()
@@ -166,6 +218,45 @@ func BenchmarkCacherV4GetParallel(b *testing.B) {
 	c := NewCacheV4(b.N, 0)
 	for i := 0; i < b.N; i++ {
 		c.Set(key(i), value(), 0)
+	}
+
+	b.StartTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		counter := 0
+		for pb.Next() {
+			c.Get(key(counter))
+			counter = counter + 1
+		}
+	})
+}
+
+func BenchmarkCacherV5GetParallel(b *testing.B) {
+	b.StopTimer()
+	c := NewCacheV5(b.N, 2560, 0)
+	for i := 0; i < b.N; i++ {
+		c.Set(key(i), value(), 0)
+	}
+
+	b.StartTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		counter := 0
+		for pb.Next() {
+			c.Get(key(counter))
+			counter = counter + 1
+		}
+	})
+}
+
+func BenchmarkBigCacheStdGetParallel(b *testing.B) {
+	b.StopTimer()
+	config := bigcache.Config{
+		Shards:       128,
+		MaxEntrySize: 256,
+		LifeWindow:   100 * time.Minute,
+	}
+	c, _ := bigcache.NewBigCache(config)
+	for i := 0; i < b.N; i++ {
+		c.Set(key(i), value())
 	}
 
 	b.StartTimer()

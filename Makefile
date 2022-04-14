@@ -6,5 +6,6 @@ run: build
 
 test:
 	go test -v ./...
+
 bench:
-	go test -bench=. -benchmem -benchtime=4s ./... -timeout 30m
+	go test -bench=. -benchmem -benchtime=4s . -timeout 30m  -cpuprofile=cpu.pprof -memprofile=mem.pprof

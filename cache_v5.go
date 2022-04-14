@@ -16,10 +16,11 @@ type cacheV5 struct {
 }
 
 type cacheV5ByteStorage struct {
-	data    map[uint64]int
-	storage []byte
-	lock    sync.RWMutex
-	tail    int
+	data     map[uint64]int
+	storage  []byte
+	lock     sync.RWMutex
+	tail     int
+	capacity int
 }
 
 func NewCacheV5(capacity, maxEntrySize, shards int) Cacher {
@@ -34,7 +35,7 @@ func NewCacheV5(capacity, maxEntrySize, shards int) Cacher {
 		shardMask: uint64(shards - 1),
 	}
 	for i := 0; i < shards; i++ {
-		t.shards[i] = NewCacheV5ByteStorage(capacity/shards, maxEntrySize/shards)
+		t.shards[i] = NewCacheV5ByteStorage(capacity/shards, maxEntrySize)
 	}
 	return t
 }
@@ -78,8 +79,9 @@ func (t *cacheV5) getHashKey(key string) uint64 {
 
 func NewCacheV5ByteStorage(capacity, maxEntrySize int) *cacheV5ByteStorage {
 	return &cacheV5ByteStorage{
-		data:    make(map[uint64]int, capacity),
-		storage: make([]byte, maxEntrySize),
+		data:     make(map[uint64]int, capacity),
+		storage:  make([]byte, maxEntrySize),
+		capacity: maxEntrySize,
 	}
 }
 
@@ -89,18 +91,21 @@ func (t *cacheV5ByteStorage) Set(keyHash uint64, value []byte, ttl time.Duration
 		expires = time.Now().Add(ttl).UnixNano()
 	}
 	t.lock.Lock()
-	pos := t.tail
 	needSize := headerLength + len(value)
-	if cap(t.storage)-len(t.storage) < needSize {
+	if t.capacity-t.tail < needSize {
 		// extend storage
-		newStorage := make([]byte, cap(t.storage)+needSize*100)
+		if t.capacity < needSize {
+			t.capacity += needSize
+		}
+		t.capacity = t.capacity * 2
+		newStorage := make([]byte, t.capacity)
 		copy(newStorage, t.storage)
 		t.storage = newStorage
 	}
-	binary.LittleEndian.PutUint64(t.storage[pos:], uint64(expires))      // uint64 -> 8
-	binary.LittleEndian.PutUint32(t.storage[pos+8:], uint32(len(value))) // uint32 -> 4
-	copy(t.storage[pos+headerLength:], value)                            // body
-	t.data[keyHash] = pos
+	binary.LittleEndian.PutUint64(t.storage[t.tail:], uint64(expires))      // uint64 -> 8
+	binary.LittleEndian.PutUint32(t.storage[t.tail+8:], uint32(len(value))) // uint32 -> 4
+	copy(t.storage[t.tail+headerLength:], value)                            // body
+	t.data[keyHash] = t.tail
 	t.tail += headerLength + len(value)
 	t.lock.Unlock()
 	return nil

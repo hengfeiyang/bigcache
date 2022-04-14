@@ -18,3 +18,9 @@ benchmark
 ```
 make bench
 ```
+
+mod
+
+```
+hash % length = hash & (length-1)
+```
