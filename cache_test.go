@@ -40,6 +40,13 @@ func BenchmarkCacheV4Set(b *testing.B) {
 	}
 }
 
+func BenchmarkCacheV5Set(b *testing.B) {
+	c := NewCacheV5(b.N, 256, 0)
+	for i := 0; i < b.N; i++ {
+		c.Set(key(i), value(), 0)
+	}
+}
+
 func BenchmarkMapGet(b *testing.B) {
 	b.StopTimer()
 	m := make(map[string][]byte)
@@ -136,6 +143,7 @@ func BenchmarkCacherV2GetParallel(b *testing.B) {
 		}
 	})
 }
+
 func BenchmarkCacherV3GetParallel(b *testing.B) {
 	b.StopTimer()
 	c := NewCacheV3(b.N)
@@ -152,6 +160,7 @@ func BenchmarkCacherV3GetParallel(b *testing.B) {
 		}
 	})
 }
+
 func BenchmarkCacherV4GetParallel(b *testing.B) {
 	b.StopTimer()
 	c := NewCacheV4(b.N, 0)

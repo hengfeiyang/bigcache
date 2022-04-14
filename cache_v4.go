@@ -7,8 +7,8 @@ import (
 
 // cacheV4 use shards map
 type cacheV4 struct {
-	shards  []Cacher
-	bitMask uint64
+	shards    []Cacher
+	shardMask uint64
 }
 
 func NewCacheV4(capacity int, shards int) Cacher {
@@ -19,8 +19,8 @@ func NewCacheV4(capacity int, shards int) Cacher {
 		shards = int(math.Pow(2, math.Ceil(math.Log2(float64(shards)))))
 	}
 	t := &cacheV4{
-		shards:  make([]Cacher, shards),
-		bitMask: uint64(shards - 1),
+		shards:    make([]Cacher, shards),
+		shardMask: uint64(shards - 1),
 	}
 	for i := 0; i < shards; i++ {
 		t.shards[i] = NewCacheV2(capacity / shards)
@@ -57,5 +57,5 @@ func (t *cacheV4) Len() int {
 }
 
 func (t *cacheV4) getShardKey(key string) int {
-	return int(NewDefaultHasher().Sum64(key) & t.bitMask)
+	return int(NewDefaultHasher().Sum64(key) & t.shardMask)
 }

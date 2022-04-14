@@ -1,34 +1,25 @@
 package bigcache
 
 import (
-	"bytes"
 	"encoding/binary"
 	"math"
 	"sync"
 	"time"
 )
 
+const headerLength = 8 + 4 // timestamp:8 + valueLength:4
+
 // cacheV5 use shards map and bytes storage
 type cacheV5 struct {
-	shards  []*cacheV5ByteStorage
-	bitMask uint64
+	shards    []*cacheV5ByteStorage
+	shardMask uint64
 }
 
 type cacheV5ByteStorage struct {
 	data    map[uint64]int
 	storage []byte
 	lock    sync.RWMutex
-	head    int
 	tail    int
-	length  int
-}
-
-type cacheV5Item struct {
-	Expires     uint64
-	KeyLength   uint16
-	ValueLength uint32
-	Key         []byte
-	Value       []byte
 }
 
 func NewCacheV5(capacity, maxEntrySize, shards int) Cacher {
@@ -39,8 +30,8 @@ func NewCacheV5(capacity, maxEntrySize, shards int) Cacher {
 		shards = int(math.Pow(2, math.Ceil(math.Log2(float64(shards)))))
 	}
 	t := &cacheV5{
-		shards:  make([]*cacheV5ByteStorage, shards),
-		bitMask: uint64(shards - 1),
+		shards:    make([]*cacheV5ByteStorage, shards),
+		shardMask: uint64(shards - 1),
 	}
 	for i := 0; i < shards; i++ {
 		t.shards[i] = NewCacheV5ByteStorage(capacity/shards, maxEntrySize/shards)
@@ -50,25 +41,25 @@ func NewCacheV5(capacity, maxEntrySize, shards int) Cacher {
 
 func (t *cacheV5) Set(key string, value []byte, ttl time.Duration) error {
 	keyHash := t.getHashKey(key)
-	shardKey := int(keyHash & t.bitMask)
+	shardKey := int(keyHash & t.shardMask)
 	return t.shards[shardKey].Set(keyHash, value, ttl)
 }
 
 func (t *cacheV5) Get(key string) ([]byte, error) {
 	keyHash := t.getHashKey(key)
-	shardKey := int(keyHash & t.bitMask)
+	shardKey := int(keyHash & t.shardMask)
 	return t.shards[shardKey].Get(keyHash)
 }
 
 func (t *cacheV5) TTL(key string) (time.Duration, error) {
 	keyHash := t.getHashKey(key)
-	shardKey := int(keyHash & t.bitMask)
+	shardKey := int(keyHash & t.shardMask)
 	return t.shards[shardKey].TTL(keyHash)
 }
 
 func (t *cacheV5) Delete(key string) {
 	keyHash := t.getHashKey(key)
-	shardKey := int(keyHash & t.bitMask)
+	shardKey := int(keyHash & t.shardMask)
 	t.shards[shardKey].Delete(keyHash)
 }
 
@@ -92,32 +83,26 @@ func NewCacheV5ByteStorage(capacity, maxEntrySize int) *cacheV5ByteStorage {
 	}
 }
 
-const headerLength = 8 + 4 // timestamp:8 + valueLength:4
-
 func (t *cacheV5ByteStorage) Set(keyHash uint64, value []byte, ttl time.Duration) error {
-	expires := time.Time{}
+	expires := int64(0)
 	if ttl > 0 {
-		expires = time.Now().Add(ttl)
+		expires = time.Now().Add(ttl).UnixNano()
 	}
-	buf := bytes.NewBuffer(nil)
-	needSize := headerLength + len(value)
 	t.lock.Lock()
 	pos := t.tail
+	needSize := headerLength + len(value)
 	if cap(t.storage)-len(t.storage) < needSize {
 		// extend storage
-		newStorage := make([]byte, cap(t.storage)+needSize*2)
+		newStorage := make([]byte, cap(t.storage)+needSize*100)
 		copy(newStorage, t.storage)
 		t.storage = newStorage
 	}
-	binary.Write(buf, binary.LittleEndian, expires.Unix())     // int64 -> 8
-	binary.Write(buf, binary.LittleEndian, uint32(len(value))) // uint32 -> 4
-	copy(t.storage[t.tail:], buf.Bytes())
-	copy(t.storage[t.tail+headerLength:], value) // body
+	binary.LittleEndian.PutUint64(t.storage[pos:], uint64(expires))      // uint64 -> 8
+	binary.LittleEndian.PutUint32(t.storage[pos+8:], uint32(len(value))) // uint32 -> 4
+	copy(t.storage[pos+headerLength:], value)                            // body
 	t.data[keyHash] = pos
 	t.tail += headerLength + len(value)
-	t.length++
 	t.lock.Unlock()
-	buf.Reset()
 	return nil
 }
 
@@ -130,31 +115,51 @@ func (t *cacheV5ByteStorage) Get(keyHash uint64) ([]byte, error) {
 	}
 	header := t.storage[pos : pos+headerLength]
 	t.lock.RUnlock()
-	buf := bytes.NewBuffer(header)
-	var expires int64
-	var keyLength uint16
-	var bodyLength uint32
-	binary.Read(buf, binary.LittleEndian, &expires)
-	binary.Read(buf, binary.LittleEndian, &keyLength)
-	binary.Read(buf, binary.LittleEndian, &bodyLength)
-	buf.Reset()
-	if expires > 0 && expires < time.Now().Unix() {
+
+	expires := int64(binary.LittleEndian.Uint64(header[0:8]))
+	bodyLength := int(binary.LittleEndian.Uint32(header[8 : 8+4]))
+	if expires > 0 && expires < time.Now().UnixNano() {
 		return nil, ErrNotExist // expired
 	}
+
 	t.lock.RLock()
-	buf.Write(t.storage[pos+int(headerLength)+int(keyLength) : pos+int(headerLength)+int(keyLength)+int(bodyLength)])
+	val := t.storage[pos+int(headerLength) : pos+int(headerLength)+int(bodyLength)]
 	t.lock.RUnlock()
-	return buf.Bytes(), nil
+	return val, nil
 }
 
 func (t *cacheV5ByteStorage) TTL(keyHash uint64) (time.Duration, error) {
-	return 0, nil
+	t.lock.RLock()
+	pos, ok := t.data[keyHash]
+	if !ok {
+		t.lock.RUnlock()
+		return -1, ErrNotExist
+	}
+	header := t.storage[pos : pos+headerLength]
+	t.lock.RUnlock()
+
+	expires := int64(binary.LittleEndian.Uint64(header[0:8]))
+	if expires == 0 {
+		return -1, nil
+	}
+	ttl := time.Duration(expires - time.Now().UnixNano())
+	if ttl <= 0 {
+		return -1, ErrNotExist // expired
+	}
+	return ttl, nil
 }
 
+// Delete delete from map, but not release storage
+// TODO: release storage
 func (t *cacheV5ByteStorage) Delete(keyHash uint64) {
-
+	t.lock.Lock()
+	delete(t.data, keyHash)
+	t.lock.Unlock()
 }
 
 func (t *cacheV5ByteStorage) Len() int {
-	return t.length
+	t.lock.RLock()
+	n := len(t.data)
+	t.lock.RUnlock()
+	return n
 }
